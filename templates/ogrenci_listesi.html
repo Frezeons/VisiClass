@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Öğrenci Listesi{% endblock %}
+
+{% block content %}
+    <h1 class="text-2xl font-bold mb-6">Öğrenci Listesi</h1>
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+        {% for ogrenci in ogrenciler %}
+        <div class="bg-white p-4 rounded shadow text-center ogrenci-card" data-id="{{ ogrenci.id }}">
+            <img src="{{ url_for('static', filename=ogrenci.foto_path) }}" alt="{{ ogrenci.ad_soyad }}" class="w-40 h-40 object-cover mx-auto rounded-md mb-4" />
+            <h3 class="font-semibold">{{ ogrenci.ad_soyad }}</h3>
+            <p class="text-sm text-gray-600">Okul No: {{ ogrenci.okul_no }}</p>
+            <p class="text-xs text-gray-500">Kayıt: {{ ogrenci.kayit_tarihi.strftime('%d/%m/%Y %H:%M') }}</p>
+            <div class="mt-3 flex justify-center gap-2">
+                <button class="deleteBtn bg-red-600 text-white px-3 py-1 rounded text-sm">Sil</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <script>
+        document.addEventListener('click', async (e) => {
+            if (!e.target.matches('.deleteBtn')) return;
+            const card = e.target.closest('.ogrenci-card');
+            const id = card && card.getAttribute('data-id');
+            if (!id) return;
+            if (!confirm('Öğrenciyi silmek istediğinize emin misiniz?')) return;
+
+            try {
+                const res = await fetch('/ogrenci_sil', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: parseInt(id, 10) })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    // remove card from DOM
+                    card.remove();
+                } else {
+                    alert('Silme başarısız: ' + (data.error || 'Bilinmeyen hata'));
+                }
+            } catch (err) {
+                alert('Sunucu hatası: ' + err);
+            }
+        });
+    </script>
+{% endblock %}

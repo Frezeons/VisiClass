@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Site{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Tailwind Play CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="min-h-screen bg-gray-50 text-gray-800">
+    <header class="bg-gray-800 text-white">
+        <nav class="max-w-6xl mx-auto px-4">
+            <ul class="flex gap-4 py-4">
+                <li><a class="hover:text-gray-300" href="{{ url_for('home') }}">Ana Sayfa</a></li>
+                <li><a class="hover:text-gray-300" href="{{ url_for('kayit') }}">Yeni Kayıt</a></li>
+                <li><a class="hover:text-gray-300" href="{{ url_for('ogrenci_listesi') }}">Öğrenci Listesi</a></li>
+                <li><a class="hover:text-gray-300" href="{{ url_for('yoklama') }}">Yoklama</a></li>
+                <li><a class="hover:text-gray-300" href="{{ url_for('about') }}">Hakkımızda</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 py-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-gray-800 text-white mt-12">
+        <div class="max-w-6xl mx-auto px-4 py-4 text-center">
+            <p>&copy; 2025 - Tüm hakları saklıdır</p>
+        </div>
+    </footer>
+
+</body>
+</html>

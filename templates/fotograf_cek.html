@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}Fotoğraf Çek{% endblock %}
+
+{% block content %}
+    <h1 class="text-2xl font-semibold mb-6 text-center">Fotoğraf Çek</h1>
+    <div class="max-w-3xl mx-auto bg-white p-6 rounded shadow text-center">
+        <div class="flex flex-col items-center gap-4">
+            <video id="video" width="640" height="480" autoplay class="rounded-md border"></video>
+            <canvas id="canvas" width="640" height="480" style="display: none;" class="rounded-md border"></canvas>
+            <div class="flex gap-3">
+                <button id="snap" class="bg-blue-600 text-white px-4 py-2 rounded-md">Fotoğraf Çek</button>
+                <button id="retake" style="display: none;" class="bg-yellow-500 text-white px-4 py-2 rounded-md">Tekrar Çek</button>
+                <button id="save" style="display: none;" class="bg-green-600 text-white px-4 py-2 rounded-md">Kaydet</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const snap = document.getElementById('snap');
+        const retake = document.getElementById('retake');
+        const save = document.getElementById('save');
+        const context = canvas.getContext('2d');
+        let stream;
+
+        // Kamera erişimi
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(function(streamObj) {
+                stream = streamObj;
+                video.srcObject = stream;
+            })
+            .catch(function(err) {
+                console.log("Kamera erişimi hatası: " + err);
+            });
+
+        // Fotoğraf çek
+        snap.addEventListener("click", function() {
+            context.drawImage(video, 0, 0, 640, 480);
+            video.style.display = 'none';
+            canvas.style.display = 'block';
+            snap.style.display = 'none';
+            retake.style.display = 'inline-block';
+            save.style.display = 'inline-block';
+        });
+
+        // Tekrar çek
+        retake.addEventListener("click", function() {
+            video.style.display = 'block';
+            canvas.style.display = 'none';
+            snap.style.display = 'inline-block';
+            retake.style.display = 'none';
+            save.style.display = 'none';
+        });
+
+        // Kaydet
+        save.addEventListener("click", function() {
+            const imageData = canvas.toDataURL('image/jpeg');
+            
+            fetch('/fotograf_kaydet', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    okul_no: '{{ okul_no }}',
+                    image_data: imageData
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    window.location.href = '/ogrenci_listesi';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Fotoğraf kaydedilirken bir hata oluştu!');
+            });
+        });
+    </script>
+{% endblock %}

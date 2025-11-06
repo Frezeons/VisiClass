@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block title %}Öğrenci Kayıt{% endblock %}
+
+{% block content %}
+    <h1 class="text-2xl font-bold mb-4 text-center">Öğrenci Kayıt Formu</h1>
+    <form id="kayitForm" class="max-w-md mx-auto bg-white p-6 rounded shadow" enctype="multipart/form-data">
+        <div id="errorBox" class="mb-4 text-center text-red-600 font-semibold" style="display:none;"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label for="ad" class="block text-sm font-medium text-gray-700">Ad</label>
+                <input type="text" id="ad" name="ad" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+            <div>
+                <label for="soyad" class="block text-sm font-medium text-gray-700">Soyad</label>
+                <input type="text" id="soyad" name="soyad" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <label for="okul_no" class="block text-sm font-medium text-gray-700">Okul Numarası</label>
+            <input type="text" id="okul_no" name="okul_no" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+        </div>
+
+        <!-- Fotoğraf seçenekleri -->
+        <div class="mb-4">
+            <p class="text-sm text-gray-600 mb-2">Fotoğraf yükleyin veya kameradan çekin:</p>
+            <div class="flex gap-3 items-center">
+                <input id="fileInput" name="photo_file" type="file" accept="image/*" class="hidden" />
+                <button type="button" id="chooseFile" class="bg-gray-200 px-3 py-2 rounded">Dosya Yükleyin</button>
+                <button type="button" id="openCamera" class="bg-blue-600 text-white px-3 py-2 rounded">Kamerayı Aç</button>
+                <span id="photoStatus" class="text-sm text-gray-500"></span>
+            </div>
+        </div>
+
+        <!-- Kamera görüntüsü (başlangıçta gizli) -->
+        <div id="cameraArea" class="mb-4 hidden">
+            <div class="bg-gray-100 p-4 rounded text-center">
+                <video id="video" width="320" height="240" autoplay class="mx-auto rounded-md border"></video>
+                <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+                <div class="mt-3 flex justify-center gap-3">
+                    <button type="button" id="snap" class="bg-yellow-500 text-white px-3 py-2 rounded">Fotoğraf Çek</button>
+                    <button type="button" id="retake" class="bg-gray-300 px-3 py-2 rounded" style="display:none;">Tekrar Çek</button>
+                    <button type="button" id="usePhoto" class="bg-green-600 text-white px-3 py-2 rounded" style="display:none;">Kullan</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <button type="submit" id="submitBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md">Kaydı Tamamla</button>
+        </div>
+    </form>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const chooseFile = document.getElementById('chooseFile');
+        const openCamera = document.getElementById('openCamera');
+        const cameraArea = document.getElementById('cameraArea');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const snap = document.getElementById('snap');
+        const retake = document.getElementById('retake');
+        const usePhoto = document.getElementById('usePhoto');
+        const photoStatus = document.getElementById('photoStatus');
+        const form = document.getElementById('kayitForm');
+        let stream = null;
+        let takenBlob = null;
+
+        chooseFile.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files && fileInput.files[0]) {
+                photoStatus.textContent = 'Dosya seçildi: ' + fileInput.files[0].name;
+                // hide camera area if open
+                if (stream) {
+                    stream.getTracks().forEach(t => t.stop());
+                    stream = null;
+                }
+                cameraArea.classList.add('hidden');
+                takenBlob = null;
+            }
+        });
+
+        openCamera.addEventListener('click', async () => {
+            cameraArea.classList.remove('hidden');
+            photoStatus.textContent = '';
+            fileInput.value = '';
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+            } catch (err) {
+                alert('Kamera açılamadı: ' + err);
+            }
+        });
+
+        snap.addEventListener('click', () => {
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            video.style.display = 'none';
+            canvas.style.display = 'block';
+            snap.style.display = 'none';
+            retake.style.display = 'inline-block';
+            usePhoto.style.display = 'inline-block';
+        });
+
+        retake.addEventListener('click', () => {
+            canvas.style.display = 'none';
+            video.style.display = 'block';
+            snap.style.display = 'inline-block';
+            retake.style.display = 'none';
+            usePhoto.style.display = 'none';
+        });
+
+        usePhoto.addEventListener('click', () => {
+            canvas.toBlob((blob) => {
+                takenBlob = blob;
+                photoStatus.textContent = 'Kamera fotoğrafı hazır';
+                // stop camera
+                if (stream) {
+                    stream.getTracks().forEach(t => t.stop());
+                    stream = null;
+                }
+                cameraArea.classList.add('hidden');
+            }, 'image/jpeg', 0.9);
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const ad = document.getElementById('ad').value.trim();
+            const soyad = document.getElementById('soyad').value.trim();
+            const okul_no = document.getElementById('okul_no').value.trim();
+
+            if (!ad || !soyad || !okul_no) {
+                alert('Lütfen ad, soyad ve okul numarasını doldurun.');
+                return;
+            }
+
+            const fd = new FormData();
+            fd.append('ad', ad);
+            fd.append('soyad', soyad);
+            fd.append('okul_no', okul_no);
+
+            if (fileInput.files && fileInput.files[0]) {
+                fd.append('photo', fileInput.files[0]);
+            } else if (takenBlob) {
+                fd.append('photo', takenBlob, okul_no + '.jpg');
+            } else {
+                alert('Lütfen fotoğraf yükleyin veya kameradan fotoğraf çekin.');
+                return;
+            }
+
+            document.getElementById('submitBtn').disabled = true;
+
+            try {
+                const res = await fetch("{{ url_for('kayit') }}", {
+                    method: 'POST',
+                    body: fd
+                });
+                const data = await res.json();
+                if (data.success) {
+                    window.location.href = data.redirect || '/ogrenci_listesi';
+                } else {
+                    const errorBox = document.getElementById('errorBox');
+                    errorBox.textContent = data.error || 'Kayıt başarısız.';
+                    errorBox.style.display = 'block';
+                }
+            } catch (err) {
+                const errorBox = document.getElementById('errorBox');
+                errorBox.textContent = 'Sunucu hatası: ' + err;
+                errorBox.style.display = 'block';
+            } finally {
+                document.getElementById('submitBtn').disabled = false;
+            }
+        });
+    </script>
+{% endblock %}

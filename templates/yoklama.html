@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+
+{% block title %}Yoklama{% endblock %}
+
+{% block content %}
+  <h1 class="text-2xl font-bold mb-4">Yoklama</h1>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="md:col-span-2 bg-white p-4 rounded shadow">
+      <div class="relative">
+        <video id="video" width="720" height="560" autoplay muted playsinline class="rounded"></video>
+        <div id="status" class="absolute top-2 left-2 bg-yellow-100 text-sm text-yellow-800 px-2 py-1 rounded">Hazırlanıyor...</div>
+      </div>
+    </div>
+    <div class="bg-white p-4 rounded shadow">
+      <h2 class="font-semibold mb-2">Canlı Tanınanlar</h2>
+      <div id="liveList" class="space-y-2"></div>
+      <div class="mt-4">
+        <button id="finishBtn" class="bg-red-600 text-white px-4 py-2 rounded">Yoklamayı Bitir</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="results" class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6" style="display:none;">
+    <div class="bg-white p-4 rounded shadow">
+      <h3 class="font-semibold mb-2">Gelenler</h3>
+      <ul id="presentList" class="list-disc pl-5 text-sm text-gray-700"></ul>
+    </div>
+    <div class="bg-white p-4 rounded shadow">
+      <h3 class="font-semibold mb-2">Gelmediler</h3>
+      <ul id="absentList" class="list-disc pl-5 text-sm text-gray-700"></ul>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+  <script>
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+    const liveList = document.getElementById('liveList');
+    const finishBtn = document.getElementById('finishBtn');
+    const results = document.getElementById('results');
+    const presentListEl = document.getElementById('presentList');
+    const absentListEl = document.getElementById('absentList');
+
+    let labeledDescriptors = [];
+    let faceMatcher;
+    let knownStudents = []; // array of {label, okul_no}
+    let presentSet = new Set();
+
+  // Load models from local static models folder
+  const MODEL_URL = '/static/models';
+
+  // Detection options - increase inputSize for better accuracy, lower scoreThreshold to be more permissive
+  const tinyOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.35 });
+
+    async function init() {
+      try {
+        status.textContent = 'Modeller yükleniyor...';
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+        status.textContent = 'Modeller yüklendi. Bilinen yüzler alınıyor...';
+      } catch (e) {
+        console.error('Model yüklenirken hata:', e);
+        status.textContent = 'Model yüklenemedi. DevTools Console kontrol edin.';
+        return;
+      }
+
+      // fetch known faces list from server
+      try {
+        const res = await fetch('/api/known_faces');
+        knownStudents = await res.json();
+        status.textContent = `Bilinen yüzler: ${knownStudents.length} yükleniyor...`;
+      } catch (e) {
+        console.error('Known faces alınamadı:', e);
+        status.textContent = 'Sunucudan bilinen yüzler alınamadı.';
+        return;
+      }
+
+      // build labeled descriptors
+      for (const s of knownStudents) {
+        try {
+          const img = await faceapi.fetchImage(s.url);
+          // First try: default (more permissive) tinyOptions
+          let detection = await faceapi.detectSingleFace(img, tinyOptions).withFaceLandmarks().withFaceDescriptor();
+          // Fallback: try a different threshold / input size if not detected
+          if (!detection) {
+            try {
+              const fallbackOpts = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 });
+              detection = await faceapi.detectSingleFace(img, fallbackOpts).withFaceLandmarks().withFaceDescriptor();
+            } catch (inner) {
+              console.debug('Fallback detect failed for', s.label, inner);
+            }
+          }
+
+          if (detection && detection.descriptor) {
+            labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(s.label, [detection.descriptor]));
+          } else {
+            console.warn('Yüz bulunamadı veya descriptor oluşturulamadı for', s.label, s.url);
+          }
+        } catch (e) {
+          console.warn('Error loading face for', s.label, e);
+        }
+      }
+
+      if (labeledDescriptors.length) {
+        faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
+        status.textContent = `Hazır - ${labeledDescriptors.length} yüz tanımlandı.`;
+      } else {
+        status.textContent = 'Hiçbir bilinen yüz için descriptor oluşturulamadı. Fotoğrafların /static/ogrenci_fotolari içinde ve modellerin indirildiğinden emin olun.';
+      }
+
+      startVideo();
+    }
+
+    function startVideo() {
+      navigator.mediaDevices.getUserMedia({ video: {} })
+        .then(stream => { video.srcObject = stream; })
+        .catch(err => console.error('Kamera açılamadı', err));
+    }
+
+    video.addEventListener('play', () => {
+      const canvas = faceapi.createCanvasFromMedia(video);
+      canvas.style.position = 'absolute';
+      video.parentElement.append(canvas);
+      const displaySize = { width: video.width, height: video.height };
+      faceapi.matchDimensions(canvas, displaySize);
+
+      const interval = setInterval(async () => {
+        if (!faceMatcher) return;
+        // Use tinyOptions here for better detection sensitivity
+        const detections = await faceapi.detectAllFaces(video, tinyOptions).withFaceLandmarks().withFaceDescriptors();
+        const resizedDetections = faceapi.resizeResults(detections, displaySize);
+        canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+        faceapi.draw.drawDetections(canvas, resizedDetections);
+
+        for (const d of resizedDetections) {
+          const best = faceMatcher.findBestMatch(d.descriptor);
+          if (best && best.label && best.label !== 'unknown') {
+            presentSet.add(best.label);
+          }
+        }
+
+        renderLiveList();
+      }, 800);
+    });
+
+    function renderLiveList() {
+      liveList.innerHTML = '';
+      for (const label of presentSet) {
+        const li = document.createElement('div');
+        li.className = 'flex items-center gap-2';
+        li.textContent = label;
+        liveList.appendChild(li);
+      }
+    }
+
+    finishBtn.addEventListener('click', () => {
+      // prepare present and absent lists
+      const present = Array.from(presentSet);
+      const all = knownStudents.map(s => s.label);
+      const absent = all.filter(l => !present.includes(l));
+
+      presentListEl.innerHTML = '';
+      absentListEl.innerHTML = '';
+      present.forEach(p => { const li = document.createElement('li'); li.textContent = p; presentListEl.appendChild(li); });
+      absent.forEach(a => { const li = document.createElement('li'); li.textContent = a; absentListEl.appendChild(li); });
+
+      results.style.display = 'grid';
+    });
+
+    init();
+  </script>
+
+{% endblock %}
